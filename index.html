@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Orbit Run 3D</title>
+<style>
+  :root{
+    --bg:#071025;
+    --panel:#0f1724;
+    --accent:#61dafb;
+    --muted:#98a8b8;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);font-family:Inter,system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;color:#fff}
+  #wrap{display:flex;flex-direction:column;align-items:center;height:100%;padding:12px;box-sizing:border-box;gap:10px}
+  header{width:100%;max-width:1100px;display:flex;justify-content:space-between;align-items:center}
+  .brand{display:flex;gap:10px;align-items:center}
+  .logo{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#0f2132,#081226);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(0,0,0,0.6)}
+  .logo span{font-size:20px}
+  h1{margin:0;font-size:18px;letter-spacing:0.6px}
+  .hud{display:flex;gap:8px;align-items:center}
+  .pill{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.03));padding:8px 12px;border-radius:10px;color:var(--muted);display:flex;gap:8px;align-items:center;font-size:13px}
+  .pill strong{color:#fff}
+  #container{width:100%;max-width:1100px;flex:1;display:flex;align-items:center;justify-content:center}
+  canvas{border-radius:12px;display:block;box-shadow:0 18px 60px rgba(0,0,0,0.7)}
+  footer{width:100%;max-width:1100px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .controls{display:flex;gap:8px;align-items:center}
+  .ctrl{width:44px;height:44px;border-radius:8px;background:linear-gradient(180deg,#071226,#032037);display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:700}
+  .btn{background:var(--accent);border:none;padding:8px 10px;border-radius:8px;color:#002;cursor:pointer;font-weight:700}
+  .muted{color:var(--muted)}
+  @media (max-width:720px){
+    header,footer{flex-direction:column;align-items:flex-start;gap:10px}
+  }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden><span>⭘</span></div>
+        <h1>Orbit Run</h1>
+      </div>
+
+      <div class="hud" aria-hidden>
+        <div class="pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="opacity:0.9"><path d="M12 2v6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M6 8l6 6 6-6" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><strong id="score">0</strong></div>
+        <div class="pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="opacity:0.9"><path d="M12 2v6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M6 8l6 6 6-6" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><strong id="best">0</strong></div>
+        <div class="pill muted" id="levelP">lvl <strong id="level">1</strong></div>
+      </div>
+    </header>
+
+    <div id="container">
+      <canvas id="scene"></canvas>
+    </div>
+
+    <footer>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="muted">controls</div>
+        <div class="controls">
+          <div class="ctrl" title="left">◀</div>
+          <div class="ctrl" title="jump">▲</div>
+          <div class="ctrl" title="right">▶</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn" id="reset">↺</button>
+        <div class="muted">auto save</div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Three.js from CDN -->
+  <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+
+  <script>
+  // 3D Runner - Single-file implementation using Three.js
+  // Save this as index.html and open it in modern browsers.
+  (() => {
+    // Basic scene / renderer / camera
+    const canvas = document.getElementById('scene');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha:false });
+    renderer.setClearColor(0x071026);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(60, 16/9, 0.1, 2000);
+    camera.position.set(0, 6, -14);
+    camera.lookAt(0,2,0);
+
+    // resize handling
+    function fitCanvas(){
+      const container = document.getElementById('container');
+      const rect = container.getBoundingClientRect();
+      const w = Math.min(rect.width, 1100);
+      const h = Math.min(window.innerHeight - 220, 640);
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      renderer.setPixelRatio(dpr);
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', fitCanvas);
+    fitCanvas();
+
+    // lighting
+    const amb = new THREE.HemisphereLight(0x88b9ff, 0x08111b, 0.9);
+    scene.add(amb);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+    dir.position.set(5,10,-5);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(1024,1024);
+    dir.shadow.camera.left = -30; dir.shadow.camera.right = 30;
+    dir.shadow.camera.top = 30; dir.shadow.camera.bottom = -30;
+    scene.add(dir);
+
+    // ground plane (far)
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x081826, roughness:0.9, metalness:0.05 });
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), groundMat);
+    ground.rotation.x = -Math.PI/2; ground.position.y = -50;
+    scene.add(ground);
+
+    // runner (player)
+    const playerRadius = 0.6;
+    const playerGeo = new THREE.SphereGeometry(playerRadius, 24, 18);
+    const playerMat = new THREE.MeshStandardMaterial({ color: 0xffc56b, roughness:0.4, metalness:0.2 });
+    const playerMesh = new THREE.Mesh(playerGeo, playerMat); playerMesh.castShadow = true;
+    scene.add(playerMesh);
+
+    // trail glow
+    const glowGeo = new THREE.SphereGeometry(playerRadius*1.6, 12, 12);
+    const glowMat = new THREE.MeshBasicMaterial({ color:0xffd9a6, transparent:true, opacity:0.08 });
+    const glow = new THREE.Mesh(glowGeo, glowMat); scene.add(glow);
+
+    // world data: segments with orientation, tiles and obstacles
+    const segments = []; // each segment: { angle, tiles: Map<lane, tileobj> }
+    const laneCount = 3; // left/mid/right lanes
+    const laneX = [-2.5, 0, 2.5]; // lateral positions
+    const tileSize = 3.0; // spacing forward between tiles
+    let distance = 0;     // forward distance player has progressed (world units)
+    let spawnAhead = 120; // spawn segments ahead in units
+    let baseSpeed = 9;    // forward speed
+    let difficulty = 1;
+    let score = 0;
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const levelEl = document.getElementById('level');
+    let best = parseInt(localStorage.getItem('orbit3d_best')||'0',10)||0; bestEl.textContent = best;
+
+    // groups
+    const tilesGroup = new THREE.Group(); scene.add(tilesGroup);
+    const obstaclesGroup = new THREE.Group(); scene.add(obstaclesGroup);
+    const pickupsGroup = new THREE.Group(); scene.add(pickupsGroup);
+
+    // simple materials
+    const tileMat = new THREE.MeshStandardMaterial({ color:0x142b36, roughness:0.8 });
+    const edgeMat = new THREE.MeshStandardMaterial({ color:0x0f2a36, roughness:0.9 });
+    const obsMat = new THREE.MeshStandardMaterial({ color:0xff6b6b, roughness:0.5, metalness:0.2 });
+    const pickupMat = new THREE.MeshStandardMaterial({ color:0x61dafb, emissive:0x2b8cae, emissiveIntensity:0.6 });
+
+    // player state
+    const player = {
+      lane: 1,       // 0 left, 1 mid, 2 right
+      targetLane: 1,
+      x: laneX[1],
+      y: 2.0,
+      z: 0,          // world forward position
+      vy: 0,
+      grounded: true,
+      jumpVel: 10,
+      radius: playerRadius,
+      alive: true
+    };
+
+    // procedural generator helpers
+    function tileKey(idx, lane){ return `${idx}:${lane}`; }
+
+    // add a tile mesh at forward index i and lane
+    function addTile(i, laneIndex){
+      const z = -i * tileSize;
+      const x = laneX[laneIndex];
+      const geometry = new THREE.BoxGeometry(2.6, 0.4, tileSize*0.96);
+      const m = tileMat.clone();
+      const mesh = new THREE.Mesh(geometry, m);
+      mesh.position.set(x, 0, z);
+      mesh.receiveShadow = true;
+      mesh.userData = { idx: i, lane: laneIndex, type: 'tile' };
+      tilesGroup.add(mesh);
+      return mesh;
+    }
+
+    // add an obstacle mesh
+    function addObstacle(i, laneIndex){
+      const z = -i * tileSize;
+      const x = laneX[laneIndex];
+      const h = 1.2 + Math.random()*1.6;
+      const geometry = new THREE.BoxGeometry(1.2, h, 1.2);
+      const mesh = new THREE.Mesh(geometry, obsMat);
+      mesh.position.set(x, h/2, z - tileSize*0.2);
+      mesh.castShadow = true;
+      mesh.userData = { idx:i, lane:laneIndex, type:'obs' };
+      obstaclesGroup.add(mesh);
+      return mesh;
+    }
+
+    // add a pickup
+    function addPickup(i, laneIndex){
+      const z = -i * tileSize;
+      const x = laneX[laneIndex];
+      const geometry = new THREE.TetrahedronGeometry(0.5);
+      const mesh = new THREE.Mesh(geometry, pickupMat);
+      mesh.position.set(x, 0.7, z);
+      mesh.rotation.set(Math.random(), Math.random(), Math.random());
+      mesh.userData = { idx:i, lane:laneIndex, type:'pick' };
+      pickupsGroup.add(mesh);
+      return mesh;
+    }
+
+    // generate initial corridor (index increases forward)
+    const EXISTING_TILES = new Map(); // key -> mesh
+    function generateUpTo(maxI){
+      for(let i = Math.floor(distance/tileSize); i <= maxI; i++){
+        for(let lane=0; lane<laneCount; lane++){
+          const k = tileKey(i,lane);
+          if(EXISTING_TILES.has(k)) continue;
+          // bias: center lane more likely to exist
+          let prob = 0.98 - (Math.abs(lane-1) * 0.05) - difficulty*0.01;
+          if(Math.random() > prob){
+            // leave a gap
+            EXISTING_TILES.set(k, null);
+            continue;
+          }
+          const tile = addTile(i, lane);
+          EXISTING_TILES.set(k, tile);
+
+          // occasionally add obstacle or pickup
+          if(Math.random() < 0.08 + difficulty*0.01){
+            if(Math.random() < 0.6){
+              addObstacle(i, lane);
+            } else {
+              addPickup(i, lane);
+            }
+          }
+        }
+      }
+    }
+
+    // clear far behind
+    function cleanup(minI){
+      for(const [k,mesh] of EXISTING_TILES){
+        if(!mesh) { EXISTING_TILES.delete(k); continue; }
+        const idx = mesh.userData.idx;
+        if(idx > minI) continue;
+        // leave some behind? No, remove tiles with idx > minI? We'll remove by z threshold
+        const z = mesh.position.z;
+        if(z > 20){
+          tilesGroup.remove(mesh);
+          EXISTING_TILES.delete(k);
+        }
+      }
+      // remove obstacles/pickups far behind
+      obstaclesGroup.children.slice().forEach(m=>{
+        if(m.position.z > 20) obstaclesGroup.remove(m);
+      });
+      pickupsGroup.children.slice().forEach(m=>{
+        if(m.position.z > 20) pickupsGroup.remove(m);
+      });
+    }
+
+    // input
+    const keys = {};
+    window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; if(['arrowleft','arrowright','arrowup',' '].includes(e.key.toLowerCase())) e.preventDefault(); });
+    window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+    // touch zones
+    let touch = { left:false, right:false, up:false };
+    if('ontouchstart' in window){
+      const leftZone = document.createElement('div');
+      const rightZone = document.createElement('div');
+      const upZone = document.createElement('div');
+      [leftZone,rightZone,upZone].forEach(z=>{ z.style.position='fixed'; z.style.zIndex='9999'; z.style.opacity='0'; z.style.touchAction='none'; document.body.appendChild(z) });
+      leftZone.style.left='0'; leftZone.style.bottom='0'; leftZone.style.width='35%'; leftZone.style.height='60%';
+      rightZone.style.right='0'; rightZone.style.bottom='0'; rightZone.style.width='35%'; rightZone.style.height='60%';
+      upZone.style.left='35%'; upZone.style.bottom='0'; upZone.style.width='30%'; upZone.style.height='60%';
+      leftZone.addEventListener('touchstart',()=>touch.left=true); leftZone.addEventListener('touchend',()=>touch.left=false);
+      rightZone.addEventListener('touchstart',()=>touch.right=true); rightZone.addEventListener('touchend',()=>touch.right=false);
+      upZone.addEventListener('touchstart',()=>touch.up=true); upZone.addEventListener('touchend',()=>touch.up=false);
+    }
+
+    // reset / respawn
+    let running = true;
+    function resetRun(){
+      // clear existing meshes
+      tilesGroup.children.slice().forEach(m => tilesGroup.remove(m));
+      obstaclesGroup.children.slice().forEach(m => obstaclesGroup.remove(m));
+      pickupsGroup.children.slice().forEach(m => pickupsGroup.remove(m));
+      EXISTING_TILES.clear();
+      distance = 0; score = 0; difficulty = 1; baseSpeed = 9;
+      player.lane = 1; player.targetLane = 1; player.x = laneX[1]; player.y = 2; player.vy = 0; player.z = 0; player.grounded = true; player.alive = true;
+      generateUpTo(Math.floor(spawnAhead / tileSize));
+      running = true;
+    }
+
+    document.getElementById('reset').addEventListener('click', ()=>{
+      if(score > best){ best = score; localStorage.setItem('orbit3d_best', ''+best); bestEl.textContent = best; }
+      resetRun();
+    });
+
+    // collision helpers
+    function checkCollision(){
+      // check obstacles close ahead near player's forward index
+      const pZ = -Math.round(distance / tileSize);
+      // check obstacles group for collision by distance
+      for(const m of obstaclesGroup.children){
+        const dz = Math.abs(m.position.z - player.z);
+        if(dz > 2.0) continue;
+        const dx = Math.abs(m.position.x - player.x);
+        const dy = player.y - m.position.y + (m.geometry.parameters.height/2 || 1);
+        // squared radial approximate
+        if(dx < 1.0 + player.radius && dy < 1.0 + player.radius){
+          // collision
+          player.alive = false;
+          running = false;
+          // set best
+          if(score > best){ best = score; localStorage.setItem('orbit3d_best', ''+best); bestEl.textContent = best; }
+          // small animation: fall
+          break;
+        }
+      }
+      // collect pickups
+      pickupsGroup.children.slice().forEach(m=>{
+        const dz = Math.abs(m.position.z - player.z);
+        if(dz > 2.0) return;
+        const dx = Math.abs(m.position.x - player.x);
+        const dy = Math.abs(m.position.y - player.y);
+        if(dx < 1.2 && dy < 1.2){
+          // collect
+          pickupsGroup.remove(m);
+          score += 18;
+        }
+      });
+    }
+
+    // main loop variables
+    let last = performance.now();
+
+    // helper tween towards
+    function approach(a,b,amt){ return a + (b-a)*Math.min(1,amt); }
+
+    // start generation
+    generateUpTo(Math.floor(spawnAhead / tileSize));
+
+    // main animate
+    function animate(){
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min(40, now - last) / 1000;
+      last = now;
+      // inputs
+      const left = keys['arrowleft'] || keys['a'] || touch.left;
+      const right = keys['arrowright'] || keys['d'] || touch.right;
+      const up = keys['arrowup'] || keys['w'] || keys[' '] || touch.up;
+
+      if(running){
+        // lane change input: press left/right to change target lane
+        if(left && !right) { player.targetLane = Math.max(0, player.targetLane - 1); keys['arrowleft']=false; keys['a']=false; touch.left=false; }
+        if(right && !left) { player.targetLane = Math.min(laneCount-1, player.targetLane + 1); keys['arrowright']=false; keys['d']=false; touch.right=false; }
+
+        // jump
+        if(up && player.grounded){ player.vy = player.jumpVel; player.grounded = false; touch.up=false; keys['arrowup']=false; keys['w']=false; keys[' ']=false; }
+
+        // forward motion
+        const sp = baseSpeed + difficulty * 0.8;
+        distance += sp * dt;
+        player.z = -distance;
+
+        // move player toward target lane smoothly
+        const targetX = laneX[player.targetLane];
+        player.x = approach(player.x, targetX, Math.min(1, 12 * dt));
+        // vertical physics
+        player.vy -= 24 * dt; // gravity
+        player.y += player.vy * dt;
+        if(player.y <= 0.9){
+          player.y = 0.9; player.vy = 0; player.grounded = true;
+        }
+
+        // update meshes positions relative to camera
+        // move tiles and obstacles z positions by their mesh positions (they're created with z = -i * tileSize)
+        // remove far behind tiles
+        cleanup();
+
+        // spawn more ahead as necessary
+        const idxAhead = Math.floor(distance / tileSize) + Math.ceil(spawnAhead/tileSize);
+        generateUpTo(idxAhead);
+
+        // difficulty scaling
+        if(Math.floor(distance / 50) > (difficulty - 1)*2){
+          difficulty += 1;
+          levelEl.textContent = difficulty;
+          // small speed bump
+          baseSpeed += 0.6;
+        }
+
+        // update groups transforms (slight bobbing)
+        tilesGroup.children.forEach(m=>{
+          // small subtle movement for depth effect
+          const k = m.userData.idx;
+          m.position.z = -k*tileSize - (distance % tileSize);
+        });
+        obstaclesGroup.children.forEach(m=>{
+          const k = m.userData.idx;
+          m.position.z = -k*tileSize - (distance % tileSize);
+        });
+        pickupsGroup.children.forEach(m=>{
+          const k = m.userData.idx;
+          m.position.z = -k*tileSize - (distance % tileSize);
+          m.rotation.y += dt * 2.0;
+        });
+
+        // set player mesh transforms
+        playerMesh.position.set(player.x, player.y + 0.15, player.z);
+        playerMesh.rotation.x += dt * 1.8;
+        glow.position.copy(playerMesh.position);
+        glow.position.y -= 0.05;
+
+        // collision / pickups
+        checkCollision();
+
+        // scoring
+        score = Math.floor(distance * 2) + levelEl.textContent * 5;
+        scoreEl.textContent = score;
+      } else {
+        // death physics: fall
+        player.vy -= 24 * dt;
+        player.y += player.vy * dt;
+        playerMesh.position.set(player.x, player.y + 0.15, player.z);
+        // gentle camera shake on death
+      }
+
+      // camera follow
+      const camTarget = new THREE.Vector3(player.x, player.y + 3.6, player.z - 8.0);
+      camera.position.lerp(camTarget, 0.12);
+      camera.lookAt(playerMesh.position.x, playerMesh.position.y + 0.8, playerMesh.position.z + 6);
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // cleanup helper: remove tiles and obstacles ahead or behind thresholds
+    function cleanup(){
+      // remove tiles far behind (z > cameraZ + 30)
+      const camZ = camera.position.z;
+      tilesGroup.children.slice().forEach(m=>{
+        if(m.position.z > camZ + 30) { tilesGroup.remove(m); EXISTING_TILES.delete(tileKey(m.userData.idx, m.userData.lane)); }
+      });
+      obstaclesGroup.children.slice().forEach(m=>{
+        if(m.position.z > camZ + 30) obstaclesGroup.remove(m);
+      });
+      pickupsGroup.children.slice().forEach(m=>{
+        if(m.position.z > camZ + 30) pickupsGroup.remove(m);
+      });
+    }
+
+    // initial placement
+    resetRun();
+
+    // allow clicking or tapping to jump
+    window.addEventListener('click', (e)=>{
+      if(player.grounded && running){ player.vy = player.jumpVel; player.grounded = false; }
+      // if not running, restart
+      if(!running && !player.alive){
+        // store best if needed already handled on death
+        resetRun();
+      }
+    });
+
+    // keyboard: allow quick lane switching by left/right tap
+    window.addEventListener('keydown', (e)=>{
+      if(e.key === 'ArrowLeft' || e.key === 'a'){ player.targetLane = Math.max(0, player.targetLane-1); }
+      if(e.key === 'ArrowRight' || e.key === 'd'){ player.targetLane = Math.min(laneCount-1, player.targetLane+1); }
+      if((e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') && player.grounded){ player.vy = player.jumpVel; player.grounded=false; }
+    });
+
+    // store best on unload
+    window.addEventListener('beforeunload', () => {
+      if(score > best){ localStorage.setItem('orbit3d_best', ''+score); }
+    });
+
+    // expose debug in console
+    console.info('controls: arrow keys / A D to move lanes, space/up to jump, click to jump.');
+
+  })();
+  </script>
+</body>
+</html>
